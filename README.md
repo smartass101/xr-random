@@ -7,6 +7,7 @@ One of the main uses for this library is to generate Monte Carlo samples from di
 
 The distributions from `scipy.stats` are used by default
 
+    import numpy as np
     import xarray as xr
     import xrrandom
     loc = xr.DataArray(np.arange(5), dims=['loc'], name='loc')
