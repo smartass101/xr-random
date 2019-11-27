@@ -1,1 +1,2 @@
 from .scipy_stats_sampling import sample_distribution, virtually_sample_distribution
+from .sampling import change_virtual_samples
