@@ -5,8 +5,8 @@ from arch import bootstrap
 
 
 def create_mock_bootstrap(cls, num_items, *bs_params):
-    args = args + ((),)         # add empty data
-    bs = cls(*bs_params)
+    args = bs_params + ((),)         # add empty data
+    bs = cls(*args)
     if num_items:
         bs._num_items = num_items  # TODO ugly workaround
     return bs
