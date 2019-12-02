@@ -12,6 +12,6 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/smartass101/xr-random",
-    py_modules=['xrrandom'],
+    packages=['xrrandom'],
     install_requires=['xarray', 'dask', 'scipy'],
 )
