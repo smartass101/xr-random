@@ -12,7 +12,7 @@ def create_mock_bootstrap(cls, num_items, *bs_params):
     return bs
 
 
-def bootstrap_samples(xrobj, di:str, n_samples:int, bootstrap_cls='IIDBootstrap', *bs_params):
+def bootstrap_samples(xrobj, dim:str, n_samples:int, bootstrap_cls='IIDBootstrap', *bs_params):
     n_items = xrobj.sizes[dim]
     if isinstance(bootstrap_cls, str):
         bootstrap_cls = getattr(bootstrap, bootstrap_cls)
