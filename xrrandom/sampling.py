@@ -80,7 +80,7 @@ def generate_virtual_samples(gen_func, args, samples:int=1, output_dtype=np.floa
         perform any operations and call compute() after changing the number of samples.
     """
     if sample_chunksize is None:
-        samples_arr = da.from_array(np.full((samples,), samples), name=SAMPLE_VEC_KEY)
+        samples_arr = da.from_array(np.full((samples,), samples), name=SAMPLE_VEC_KEY, chunks='auto')
     else:
         samples_arr = da.from_array(np.full((samples,), sample_chunksize), chunks=sample_chunksize,
                               name=SAMPLE_VEC_KEY)
