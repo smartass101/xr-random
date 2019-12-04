@@ -92,11 +92,8 @@ def generate_virtual_samples(gen_func, args, samples:int=1, output_dtype=np.floa
         Therefore, it is often convenient to define a virtual sample with sample size 1,
         perform any operations and call compute() after changing the number of samples.
     """
-    if sample_chunksize is None:
-        samples_arr = da.from_array(np.full((samples,), samples), name=SAMPLE_VEC_KEY)
-    else:
-        samples_arr = da.from_array(np.full((samples,), sample_chunksize), chunks=sample_chunksize,
-                              name=SAMPLE_VEC_KEY)
+
+    samples_arr = da.from_array(np.empty((samples,), dtype=int), name=SAMPLE_VEC_KEY, chunks=sample_chunksize or samples)    
     result = _generate_apply_ufunc(gen_func, args, samples_arr, samples, output_dtype)
     return result
 
