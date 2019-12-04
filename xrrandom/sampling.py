@@ -11,7 +11,7 @@ import xarray as xr
 def _generate_apply_ufunc(gen_func, args, samples_arr, samples, output_dtype):
     result = xr.apply_ufunc(gen_func, xr.Variable('sample', samples_arr), *args,
                             dask='parallelized', output_dtypes=[output_dtype],
-                            output_sizes={'sample': samples})
+    )
     return result
 
 

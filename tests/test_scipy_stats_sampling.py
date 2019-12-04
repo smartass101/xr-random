@@ -22,3 +22,8 @@ def test_virtual_sample_norm():
 
 
 
+def test_virtual_sample_chunked_norm():
+    loc = xr.DataArray(np.arange(5), dims=['loc'], name='loc')
+    scale = xr.DataArray(np.arange(3)/2, dims=['scale'], name='scale')
+    samples = virtually_sample_distribution('norm', 10, loc, scale=scale, sample_chunksize=5)
+    assert samples.compute().sizes == {'loc': 5, 'scale': 3, 'sample': 10}
