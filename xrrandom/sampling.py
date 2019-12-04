@@ -7,6 +7,21 @@ import dask.array as da
 import xarray as xr
 
 
+"""Empty 1byte array to be strided as required"""
+_empty_1d = np.empty(1, dtype='i1')
+
+
+def _virtual_array(shape:tuple or int):
+    """Create a virtual array with an arbitrary shape and just 1 byte allocated
+
+    this uses 0 strides in all axes, so is generally very unsafe!
+    It is only useful for carrying shape information.
+    """
+    if isinstance(shape, int):
+        shape = (shape,)
+    strides = (0,) * len(shape)
+    return np.lib.stride_tricks.as_strided(_empty_1d, shape, strides)
+
 
 def _generate_apply_ufunc(gen_func, args, samples_arr, samples, output_dtype):
     result = xr.apply_ufunc(gen_func, xr.Variable('sample', samples_arr), *args,

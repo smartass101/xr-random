@@ -2,7 +2,12 @@ import pytest
 import numpy as np
 import xarray as xr
 from xrrandom.scipy_stats_sampling import sample_distribution, virtually_sample_distribution
-from xrrandom.sampling import change_virtual_samples
+from xrrandom.sampling import change_virtual_samples, _virtual_array
+
+
+def test_virtual_array():
+    arr = _virtual_array(1000)
+    assert arr.shape == (1000,)
 
 
 def test_sample_norm():
