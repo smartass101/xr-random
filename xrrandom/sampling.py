@@ -100,25 +100,30 @@ def change_virtual_samples(virtually_sampled_darray, new_sample_count:int):
 
     Returns
     -------
-    virtually_sampled_darray : xarray.DataArray
-        array with a different sample count in the dask graph, but same reported shape
-        when .compute() is called, the result will have the new size
+    reshaped_virtually_sampled_darray : xarray.DataArray
+        the sample dimension has the new shape
+
+    Raises
+    ------
+    ValueError
+        when the sample dimension is chunked,
+        because the dask graph could be too complicated to change in that case
     """
-    virtually_sampled_darray
+    old_data = virtually_sampled_darray.data
+    sample_axis = virtually_sampled_darray.get_axis_num('sample')
+    if len(old_data.chunks[sample_axis]) != 1:
+        raise ValueError('Changing virtual sample count not possible on chunked sample dimension')
+
     dask_layers = virtually_sampled_darray.data.dask.layers.copy()
     if len(dask_layers[SAMPLE_VEC_KEY]) == 1:
         # assign new dict to prevent affecting other dask graphs
         dask_layers[SAMPLE_VEC_KEY] = {
             (SAMPLE_VEC_KEY, 0): np.full((new_sample_count,), new_sample_count)
         }
-    else:
-        raise ValueError('Changing virtual sample count not possible on chunked array')
-    old_data = virtually_sampled_darray.data
-    sample_axis = virtually_sampled_darray.get_axis_num('sample')
     new_shape = list(old_data.shape)
     new_shape[sample_axis] = new_sample_count
     new_chunks = list(old_data.chunks)
-    new_chunks[sample_axis] = (new_sample_count,)  # TODO could handle more chunks as well
+    new_chunks[sample_axis] = (new_sample_count,)
     new_data = da.Array(dask.highlevelgraph.HighLevelGraph(dask_layers,
                                              old_data.dask.dependencies),
                                              name=old_data.name,

@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 import xarray as xr
 from xrrandom.scipy_stats_sampling import sample_distribution, virtually_sample_distribution
@@ -27,3 +28,5 @@ def test_virtual_sample_chunked_norm():
     scale = xr.DataArray(np.arange(3)/2, dims=['scale'], name='scale')
     samples = virtually_sample_distribution('norm', 10, loc, scale=scale, sample_chunksize=5)
     assert samples.compute().sizes == {'loc': 5, 'scale': 3, 'sample': 10}
+    with pytest.raises(ValueError):  # because sample dim is chunked
+        samples_larger_dask = change_virtual_samples(samples, 100)
