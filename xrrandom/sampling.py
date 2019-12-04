@@ -11,7 +11,7 @@ import xarray as xr
 def _generate_apply_ufunc(gen_func, args, samples_arr, samples, output_dtype):
     result = xr.apply_ufunc(gen_func, xr.Variable('sample', samples_arr), *args,
                             dask='parallelized', output_dtypes=[output_dtype],
-                            output_sizes={'sample': samples})
+    )
     return result
 
 
@@ -23,7 +23,6 @@ def generate_samples(gen_func, args, samples:int=1, output_dtype=np.float):
     ----------
     gen_func : callable
         numpy-broadcasting-compatible function to be called as gen_func(samples, *args)
-        the samples dimension must be returned as last (because of xarray.apply_ufunc core dims)
     args : tuple of numpy.ndarray, xarray objects
         arguments to gen_func to be applied through xarray.apply_ufunc
     samples : int, optional
@@ -53,7 +52,6 @@ def generate_virtual_samples(gen_func, args, samples:int=1, output_dtype=np.floa
     ----------
     gen_func : callable
         numpy-broadcasting-compatible function to be called as gen_func(samples, *args)
-        the samples dimension must be returned as last (because of xarray.apply_ufunc core dims)
     args : tuple of numpy.ndarray, xarray objects
         arguments to gen_func to be applied through xarray.apply_ufunc
     samples : int or array_like, optional

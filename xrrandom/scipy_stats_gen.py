@@ -82,9 +82,7 @@ def sample_dim_rvs_factory(stats_distribution):
 
     def rvs(sample_vec, *args):
         binfo = np.broadcast(sample_vec, *args)
-        size = list(binfo.shape)
-        size[0] = sample_vec.item(0)
-        result = stats_distribution.rvs(*args, size=size)
+        result = stats_distribution.rvs(*args, size=binfo.shape)
         return result
 
     return rvs
