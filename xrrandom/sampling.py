@@ -86,39 +86,46 @@ def generate_virtual_samples(gen_func, args, samples:int=1, output_dtype=np.floa
     return result
 
 
-def change_virtual_samples(virtually_sampled_darray, new_sample_count:int):
+def change_virtual_samples(virtually_sampled_darray, new_sample_count:int,
+                           new_sample_chunksize:int=None):
     """Change the number of virtual samples
-
-    This works only when no sample chunking was used
 
     Parameters
     ----------
     virtually_sampled_darray : xarray.DataArray with dask data
-        result of generate_virtual_samples with sample_chunksize=None
+        result of generate_virtual_samples
     new_sample_count : int
         new sample count
+    new_sample_chunksize : int, optional
+        new sample chunksize, if not provided, the original is used,
+        unless the original equals the old sample count, then new_sample_count is used
 
     Returns
     -------
-    virtually_sampled_darray : xarray.DataArray
-        array with a different sample count in the dask graph, but same reported shape
-        when .compute() is called, the result will have the new size
+    reshaped_virtually_sampled_darray : xarray.DataArray
+        the sample dimension will have a new size and optionally a new chunksize
     """
-    virtually_sampled_darray
-    dask_layers = virtually_sampled_darray.data.dask.layers.copy()
-    if len(dask_layers[SAMPLE_VEC_KEY]) == 1:
-        # assign new dict to prevent affecting other dask graphs
-        dask_layers[SAMPLE_VEC_KEY] = {
-            (SAMPLE_VEC_KEY, 0): np.full((new_sample_count,), new_sample_count)
-        }
-    else:
-        raise ValueError('Changing virtual sample count not possible on chunked array')
     old_data = virtually_sampled_darray.data
     sample_axis = virtually_sampled_darray.get_axis_num('sample')
+    new_chunks = list(old_data.chunks)
+    if new_sample_chunksize is None:
+        if len(old_data.chunks[sample_axis]) == 1:  # just 1 chunk
+            new_sample_chunksize = new_sample_count  # do the same but with new sample size
+            sample_chunks = (new_sample_chunksize,)
+        else:                            # more chunks
+            new_sample_chunksize = old_data.chunks[sample_axis][0]  # use the same
+            whole_chunks, last_chunk = divmod(new_sample_count, new_sample_chunksize)
+            sample_chunks = (new_sample_chunksize,) * whole_chunks
+            if last_chunk != 0:
+                sample_chunks += (last_chunk,)
+    new_chunks[sample_axis] = sample_chunks
+    dask_layers = virtually_sampled_darray.data.dask.layers.copy()
+    dask_layers[SAMPLE_VEC_KEY] = {
+            (SAMPLE_VEC_KEY, i): np.full((chunksize,), chunksize)
+        for i, chunksize in enumerate(sample_chunks)
+        }
     new_shape = list(old_data.shape)
     new_shape[sample_axis] = new_sample_count
-    new_chunks = list(old_data.chunks)
-    new_chunks[sample_axis] = (new_sample_count,)  # TODO could handle more chunks as well
     new_data = da.Array(dask.highlevelgraph.HighLevelGraph(dask_layers,
                                              old_data.dask.dependencies),
                                              name=old_data.name,
