@@ -51,7 +51,7 @@ def generate_samples(gen_func, args, samples:int=1, output_dtype=np.float):
         result of gen_func(samples, *args) with a new 'sample' dimension of size *samples*
     """
     if isinstance(samples, int):
-        samples_arr = np.full((samples,), samples)
+        samples_arr = _virtual_array(samples)
     result = _generate_apply_ufunc(gen_func, args, samples_arr, samples, output_dtype)
     return result
 
@@ -93,7 +93,7 @@ def generate_virtual_samples(gen_func, args, samples:int=1, output_dtype=np.floa
         perform any operations and call compute() after changing the number of samples.
     """
 
-    samples_arr = da.from_array(np.empty((samples,), dtype=int), name=SAMPLE_VEC_KEY, chunks=sample_chunksize or samples)    
+    samples_arr = da.from_array(_virtual_array(samples), name=SAMPLE_VEC_KEY, chunks=sample_chunksize or samples)
     result = _generate_apply_ufunc(gen_func, args, samples_arr, samples, output_dtype)
     return result
 
@@ -127,11 +127,10 @@ def change_virtual_samples(virtually_sampled_darray, new_sample_count:int):
         raise ValueError('Changing virtual sample count not possible on chunked sample dimension')
 
     dask_layers = virtually_sampled_darray.data.dask.layers.copy()
-    if len(dask_layers[SAMPLE_VEC_KEY]) == 1:
-        # assign new dict to prevent affecting other dask graphs
-        dask_layers[SAMPLE_VEC_KEY] = {
-            (SAMPLE_VEC_KEY, 0): np.full((new_sample_count,), new_sample_count)
-        }
+    # assign new dict to prevent affecting other dask graphs
+    dask_layers[SAMPLE_VEC_KEY] = {
+        (SAMPLE_VEC_KEY, 0): _virtual_array(new_sample_count)
+    }
     new_shape = list(old_data.shape)
     new_shape[sample_axis] = new_sample_count
     new_chunks = list(old_data.chunks)
