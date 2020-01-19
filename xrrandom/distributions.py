@@ -1,45 +1,11 @@
+import functools
+import inspect
 import dask.array as da
+import scipy.stats as stats
 
 from .scipy_stats_sampling import sample_distribution, virtually_sample_distribution
 from .sampling import change_virtual_samples
 
-def from_scipy(stats_distribution, *args, samples=1, sample_chunksize=None, sample=False, **kwargs):
-    """Create a virtual distribution into dask from scipy.stats with parameters given as xarray objects
-
-    For the virtual sampling idea look at :py:func`xrrandom.sampling.generate_virtual_samples``
-
-    Parameters
-    ----------
-    stats_distribution : str or scipy.stats.rv_continuous or scipy.stats.rv_discrete
-        name of a scipy.sats distribution or a specific distribution object
-    samples : int, optional
-        number of samples to draw, defaults to 1
-    sample_chunksize : ints, optional
-        if given, the sample dimension will have this chunksize but the number of samples cannot be later changed
-    sample : bool, optional
-        directly sample from the distribution (True) or return virtual distribution (False), default False
-    *args, **kwargs : scalar or  array_like or xarray objects
-        positional and keyword arguments to the rvs() method of *stats_distribution*
-
-
-    Returns
-    -------
-    samples : xarray object
-        xarray object representing the given distribution or samples drawn from it, 
-        with arguments broadcasted according to dimensions and a new dimension 'sample' with size *samples*
-        if sample==False the data will be a dask Array
-
-    Raises
-    ------
-    ValueError
-        if the *stats_distribution* cannot be found or is not a valid distribution object
-    """
-    if sample:
-        # TODO: warn or raise exception if sample_chunksize is not None?
-        return sample_distribution(stats_distribution, samples, *args, **kwargs)
-    else:
-        return virtually_sample_distribution(stats_distribution, samples, *args, 
-                                             sample_chunksize=sample_chunksize, **kwargs)
 
 def sample(distribution, samples=None):
     """Sample virtual distribution
@@ -66,57 +32,87 @@ def sample(distribution, samples=None):
     return distribution.compute()
 
 
-def normal(loc=0, scale=1, samples=1, sample_chunksize=None, sample=False):
-    """Generate (virtual) samples from the normal distribution
+class ScipyStatsWrapper:
+    """Xarray wrapper for scipy.stats distribution. 
     
-    Parameters
-    ----------
-    loc : scalar or  array_like or xarray objects, optional
-        mean of the normal distribution, default value is 0
-    scale : scalar or  array_like or xarray objects, optional
-        standard derivation of the normal distribution, default value is 1
-    samples : int, optional
-        set the default number of samples, default value is 1
-    sample_chunksize : int, optional
-        if given, the sample dimension will have this chunksize but the number of samples cannot be later changed
-    sample : bool, optional
-        directly sample from the distribution (True) or return virtual distribution (False), default False
-    
+    The location (``loc``) keyword specifies the mean.
+    The scale (``scale``) keyword specifies the standard deviation
+    Other shape parameters specific for the distribution are passed to 
+    the scipy distribution.
 
-    Returns
-    -------
-    samples : xarray object
-        xarray object representing the given distribution or samples drawn from it, 
-        with arguments broadcasted according to dimensions and a new dimension 'sample' with size *samples*
-        if sample==False the data will be a dask Array
+    The size of the output array is determined by broadcasting the shapes of the
+    input arrays, scipy.stats ``shape`` parameter is ignored.
+
+    The ``samples`` parameter determines how many random samples will be drawn.
+
+    Call to the method ``rvs`` returns static array of randomly drawn samples, direct
+    call to this instance returns virtually sampled distribution.
+
+    For the virtual sampling idea look at :py:func`xrrandom.sampling.generate_virtual_samples``
     """
-    return from_scipy('norm', loc=loc, scale=scale, samples=samples, sample_chunksize=sample_chunksize, sample=sample)
 
+    _default_virtual = False
 
-def gamma(a, loc=0, scale=1, samples=1, sample_chunksize=0, sample=False):
-    """Generate (virtual) samples from the gamma distribution
+    def __init__(self, stats_distribution):
+        self._stats_distribution = stats_distribution
+        self.__doc__ = stats_distribution.__doc__.split('\n')[0]
 
-    Parameters
-    ----------
-    a : scalar or  array_like or xarray objects, optional
-        shape parameter of the gamma distribution
-    loc : scalar or  array_like or xarray objects, optional
-        mean of the normal distribution, default value is 0
-    scale : scalar or  array_like or xarray objects, optional
-        standard derivation of the normal distribution, default value is 1
-    samples : int, optional
-        set the default number of samples, default value is 1
-    sample_chunksize : int, optional
-        if given, the sample dimension will have this chunksize but the number of samples cannot be later changed
-    sample : bool, optional
-        directly sample from the distribution (True) or return virtual distribution (False), default False
-    
+    def rvs(self, *args, samples=1, virtual=None, sample_chunksize=None, **kwargs):
+        """Sample the given distribution.
+        
+        Parameters
+        ----------
+        args, kwargs: xarray.DataArray
+            The shape parameter(s) for the distribution. Should include all the non-optional arguments,
+            may include ``loc`` and ``scale``.
+        samples: int, optional
+            Number of random samples (default: 1)
+        virtual: bool, optional
+            Return virtually sampled distribution (default: False)
+        sample_chinksize: ints, optional
+            Chunksize of the sample dimension (default: None). If given, the number of samples cannot be later changed. 
+            Used only if `virtual` is True.
+        
+        Returns
+        -------
+        rvs: xarray.DataArray
+            Random samples from the given distribution. Standard static array if virtual is False,
+            otherwise DataArray wrapping delayed Dask array. In such case samples obtained by `virtual_samples.values` 
+            will be different on each call. Use `xrrandom.change_virtual_samples` or`xrrandom.distributions.sample` 
+            to change number of virtual samples.
+        """
+        virtual = virtual or self._default_virtual
 
-    Returns
-    -------
-    samples : xarray object
-        xarray object representing the given distribution or samples drawn from it, 
-        with arguments broadcasted according to dimensions and a new dimension 'sample' with size *samples*
-        if sample==False the data will be a dask Array
-    """
-    return from_scipy('gamma', a=a, loc=loc, scale=scale, samples=samples, sample_chunksize=sample_chunksize, sample=sample)
+        if virtual:
+            return virtually_sample_distribution(self._stats_distribution, samples=samples, *args, 
+                                             sample_chunksize=sample_chunksize, **kwargs)
+        else:
+            return sample_distribution(self._stats_distribution, samples=samples, *args, **kwargs)
+        
+
+    def __call__(self, *args, samples=1, sample_chunksize=None, **kwargs):        
+        """Return virtually sampled distribution.
+
+        Parameters
+        ----------
+        args, kwargs: xarray.DataArray
+            The shape parameter(s) for the distribution. Should include all the non-optional arguments,
+            may include ``loc`` and ``scale``.
+        samples: int, optional
+            Number of random samples (default: 1)
+        sample_chunksize : ints, optional
+            Chunksize of the sample dimension. If given, the number of samples cannot be later changed.
+
+        Returns
+        -------
+        virtual_samples: xarray.DataArray
+            DataArray wrapping delayed Dask array. Samples obtained by `virtual_samples.values` will be
+            different on each call. Use `xrrandom.change_virtual_samples` or`xrrandom.distributions.sample` 
+            to change number of samples.
+        """
+        return self.rvs(virtual=True, sample_chunksize=sample_chunksize)        
+
+# add wrappers for all distributions in the scipy.stats
+for name, distr in stats.__dict__.items():
+    if isinstance(distr, (stats.rv_continuous, stats.rv_discrete)):                    
+        globals()[name] = ScipyStatsWrapper(distr)
