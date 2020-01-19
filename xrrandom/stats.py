@@ -107,7 +107,7 @@ class ScipyStatsWrapper:
         -------
         virtual_samples: xarray.DataArray
             DataArray wrapping delayed Dask array. Samples obtained by `virtual_samples.values` will be
-            different on each call. Use `xrrandom.change_virtual_samples` or`xrrandom.distributions.sample` 
+            different on each call. Use `xrrandom.change_virtual_samples` or`xrrandom.sample` 
             to change number of samples.
         """
         return self.rvs(virtual=True, sample_chunksize=sample_chunksize)        
