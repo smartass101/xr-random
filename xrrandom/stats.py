@@ -2,7 +2,6 @@ import dask.array as da
 import scipy.stats as stats
 
 from .scipy_stats_sampling import sample_distribution, virtually_sample_distribution
-from .sampling import change_virtual_samples
 
 
 class ScipyStatsWrapper:
