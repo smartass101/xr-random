@@ -1,35 +1,8 @@
-import functools
-import inspect
 import dask.array as da
 import scipy.stats as stats
 
 from .scipy_stats_sampling import sample_distribution, virtually_sample_distribution
 from .sampling import change_virtual_samples
-
-
-def sample(distribution, samples=None):
-    """Sample virtual distribution
-
-    Parameters
-    ----------
-    distribution : xarray.DataArray
-        xarray representing the virtual distribution
-    samples : int, optional
-        number of samples to be generated, defaults to the number of samples specified
-        when creating the distribution
-
-
-    Returns
-    -------
-    samples : xarray object
-        samples from the given distribution
-    """
-    if not isinstance(distribution.data, da.Array):
-        raise TypeError('`distribution` must be dask xarray')
-    if samples is not None:
-        distribution = change_virtual_samples(distribution, new_sample_count=samples)
-    
-    return distribution.compute()
 
 
 class ScipyStatsWrapper:
