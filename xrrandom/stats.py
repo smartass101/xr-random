@@ -1,8 +1,24 @@
+from functools import partial
 import dask.array as da
 import scipy.stats as stats
 
 from .scipy_stats_sampling import sample_distribution, virtually_sample_distribution
+from .scipy_stats_gen import distribution_kind
 
+_scipy_rv_methods = {
+    'continuous': {'pdf', 'logpdf', 'fit', 'fit_loc_scale', 'nnlf'},
+    'discrete': {'pmf', 'logpmf'},    
+}
+
+_common_scipy_rv_methods = {'cdf', 'logcdf', 'sf', 'logsf', 'ppf', 
+                            'moment', 'stats', 'entropy', 'expect', 'median',
+                            'mean', 'std', 'var', 'interval'}
+
+def _bind_stats_method(dest, source, method):
+    return getattr(source, method).__get__(dest)
+
+def _bind_frozen_method(dest, source, method, *args, **kwargs):
+    return partial(getattr(source, method).__get__(dest), *args, **kwargs)
 
 class ScipyStatsWrapper:
     """Xarray wrapper for scipy.stats distribution. 
@@ -25,11 +41,13 @@ class ScipyStatsWrapper:
     For the virtual sampling idea look at :py:func`xrrandom.sampling.generate_virtual_samples``
     """
 
-    _default_virtual = False
+    _default_virtual = False    
 
     def __init__(self, distr):
         self._distr = distr
-        self.__doc__ = distr.__doc__.split('\n')[0]
+        self.__doc__ = distr.__doc__.split('\n')[0]        
+        for method in _common_scipy_rv_methods | _scipy_rv_methods[distribution_kind(distr)]:
+            setattr(self, method, _bind_stats_method(self, distr, method))    
 
     def rvs(self, *args, samples=1, virtual=None, sample_chunksize=None, **kwargs):
         """Sample the given distribution.
@@ -106,6 +124,9 @@ class FrozenScipyStatsWrapper:
         self.samples = samples
         self.sample_chunksize=sample_chunksize
         self.virtual = virtual
+
+        for method in _common_scipy_rv_methods | _scipy_rv_methods[distribution_kind(distr._distr)]:
+            setattr(self, method, _bind_frozen_method(self, distr, method))
 
     def rvs(self, samples=None, virtual=None, sample_chunksize=None):
         """Sample frozen distribution.
