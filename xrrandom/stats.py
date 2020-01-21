@@ -20,7 +20,7 @@ def _bind_stats_method(dest, source, method):
 def _bind_frozen_method(dest, source, method, *args, **kwargs):
     return partial(getattr(source, method).__get__(dest), *args, **kwargs)
 
-class ScipyStatsWrapper:
+class ScipyDistribution:
     """Xarray wrapper for scipy.stats distribution. 
     
     The location (``loc``) keyword specifies the mean.
@@ -105,9 +105,9 @@ class ScipyStatsWrapper:
             Frozen version of the distribution with shape parameters fixed
         """
 
-        return FrozenScipyStatsWrapper(self, *args, samples=samples, virtual=virtual, sample_chunksize=sample_chunksize, **kwargs)
+        return FrozenScipyDistribution(self, *args, samples=samples, virtual=virtual, sample_chunksize=sample_chunksize, **kwargs)
 
-class FrozenScipyStatsWrapper:
+class FrozenScipyDistribution:
     """Xarray wrapper for frozen scipy.stats distribution.         
     
     It contains the same methods as scipy.stats distribution, such as ``rvs`` to draw
@@ -160,4 +160,4 @@ class FrozenScipyStatsWrapper:
 # augment this module by all distributions in the scipy.stats
 for name, distr in stats.__dict__.items():
     if isinstance(distr, (stats.rv_continuous, stats.rv_discrete)):
-        globals()[name] = ScipyStatsWrapper(distr)
+        globals()[name] = ScipyDistribution(distr)
