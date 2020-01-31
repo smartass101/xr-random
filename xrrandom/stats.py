@@ -1,9 +1,13 @@
+from types import MethodType
 from functools import partial
+from inspect import signature, Parameter
 import dask.array as da
 import scipy.stats as stats
+import warnings
 
 from .scipy_stats_sampling import sample_distribution, virtually_sample_distribution
-from .scipy_stats_gen import distribution_kind
+from .scipy_stats_gen import distribution_kind, distribution_parameters
+
 
 _scipy_rv_methods = {
     'continuous': {'pdf', 'logpdf', 'fit', 'fit_loc_scale', 'nnlf'},
@@ -14,11 +18,45 @@ _common_scipy_rv_methods = {'cdf', 'logcdf', 'sf', 'logsf', 'ppf',
                             'moment', 'stats', 'entropy', 'expect', 'median',
                             'mean', 'std', 'var', 'interval'}
 
-def _bind_stats_method(dest, source, method):
-    return getattr(source, method).__get__(dest)
+def _update_signature(sig, stats_distribution, all_pos_or_kw=True):
+    shape_params = list(distribution_parameters(stats_distribution))
+    params = [Parameter('self', Parameter.POSITIONAL_ONLY)]
+    for param in sig.parameters.values():
+        if param.kind == Parameter.VAR_POSITIONAL:
+            for shape_par in shape_params:
+                if shape_par == 'loc':
+                    params.append(Parameter('loc', Parameter.POSITIONAL_OR_KEYWORD, default=0))
+                elif shape_par == 'scale':
+                    params.append(Parameter('scale', Parameter.POSITIONAL_OR_KEYWORD, default=1))
+                else:
+                    params.append(Parameter(shape_par, Parameter.POSITIONAL_OR_KEYWORD))
+        else:
+            if all_pos_or_kw and param.kind == Parameter.KEYWORD_ONLY:
+                param = param.replace(kind = Parameter.POSITIONAL_OR_KEYWORD)                
+            params.append(param)
+            try:
+                shape_params.remove(param.name)
+            except ValueError:
+                pass
+                    
+    return sig.replace(parameters=params)
+
+def _wrap_stats_method(stats_distribution, method, all_pos_or_kw = True):
+    """Return method from scipy distribution with updated signature describing
+    shape parameters of the distribution"""
+        
+    def call_scipy_method(self, *args, **kwargs):
+        return method(*args, **kwargs)                
+    
+    call_scipy_method.__signature__ = _update_signature(signature(method), stats_distribution, 
+                                                        all_pos_or_kw=all_pos_or_kw)
+
+    return call_scipy_method
+     
 
 def _bind_frozen_method(dest, source, method, *args, **kwargs):
     return partial(getattr(source, method).__get__(dest), *args, **kwargs)
+
 
 class ScipyDistribution:
     """Xarray wrapper for scipy.stats distribution. 
@@ -46,10 +84,18 @@ class ScipyDistribution:
     def __init__(self, distr):
         self._distr = distr
         self.__doc__ = distr.__doc__.split('\n')[0]        
-        for method in _common_scipy_rv_methods | _scipy_rv_methods[distribution_kind(distr)]:
-            setattr(self, method, _bind_stats_method(self, distr, method))    
 
-    def rvs(self, *args, samples=1, virtual=None, sample_chunksize=None, **kwargs):
+        # bind methods like pdf, cdf, ...
+        for method_name in _common_scipy_rv_methods | _scipy_rv_methods[distribution_kind(distr)]:
+            orig_method = getattr(distr, method_name)
+            new_method = MethodType(_wrap_stats_method(distr,orig_method), self)
+            setattr(self, method_name, new_method)
+    
+        # update signature of rvs method
+        self.rvs = MethodType(_wrap_stats_method(distr, self._rvs, all_pos_or_kw=True), self)
+
+
+    def _rvs(self, *args, samples=1, virtual=None, sample_chunksize=None, **kwargs):
         """Sample the given distribution.
         
         Parameters
@@ -74,13 +120,13 @@ class ScipyDistribution:
             different on each call. Use `xrrandom.change_virtual_samples` or
             `xrrandom.distributions.sample` to change number of virtual samples.
         """
-        virtual = virtual or self._default_virtual
+        virtual = virtual or self._default_virtual        
 
         if virtual:
-            return virtually_sample_distribution(self._distr, samples=samples, *args, 
+            return virtually_sample_distribution(self._distr, samples, *args, 
                                              sample_chunksize=sample_chunksize, **kwargs)
         else:
-            return sample_distribution(self._distr, samples=samples, *args, **kwargs)
+            return sample_distribution(self._distr, samples, *args, **kwargs)
         
 
     def __call__(self, *args, samples=None, virtual=None, sample_chunksize=None, **kwargs):
