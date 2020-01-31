@@ -18,8 +18,7 @@ _common_scipy_rv_methods = {'cdf', 'logcdf', 'sf', 'logsf', 'ppf',
                             'moment', 'stats', 'entropy', 'expect', 'median',
                             'mean', 'std', 'var', 'interval'}
 
-def _update_signature(sig, stats_distribution, all_pos_or_kw=True):
-    shape_params = list(distribution_parameters(stats_distribution))
+def _update_signature(sig, shape_params, all_pos_or_kw=True, remove_kwargs=False):
     params = [Parameter('self', Parameter.POSITIONAL_ONLY)]
     for param in sig.parameters.values():
         if param.kind == Parameter.VAR_POSITIONAL:
@@ -32,8 +31,10 @@ def _update_signature(sig, stats_distribution, all_pos_or_kw=True):
                     params.append(Parameter(shape_par, Parameter.POSITIONAL_OR_KEYWORD))
         else:
             if all_pos_or_kw and param.kind == Parameter.KEYWORD_ONLY:
-                param = param.replace(kind = Parameter.POSITIONAL_OR_KEYWORD)                
-            params.append(param)
+                param = param.replace(kind = Parameter.POSITIONAL_OR_KEYWORD)
+            if not remove_kwargs or param.kind != Parameter.VAR_KEYWORD:
+                params.append(param)
+
             try:
                 shape_params.remove(param.name)
             except ValueError:
@@ -41,15 +42,21 @@ def _update_signature(sig, stats_distribution, all_pos_or_kw=True):
                     
     return sig.replace(parameters=params)
 
-def _wrap_stats_method(stats_distribution, method, all_pos_or_kw = True):
+def _wrap_stats_method(stats_distribution, method, all_pos_or_kw = True, remove_kwargs = False,
+                       shape_parameters = None):
     """Return method from scipy distribution with updated signature describing
     shape parameters of the distribution"""
         
     def call_scipy_method(self, *args, **kwargs):
         return method(*args, **kwargs)                
     
-    call_scipy_method.__signature__ = _update_signature(signature(method), stats_distribution, 
-                                                        all_pos_or_kw=all_pos_or_kw)
+    if shape_parameters is None:
+        shape_parameters = list(distribution_parameters(stats_distribution))
+
+    call_scipy_method.__signature__ = _update_signature(signature(method), 
+                                                        shape_parameters,
+                                                        all_pos_or_kw=all_pos_or_kw,
+                                                        remove_kwargs=remove_kwargs)
 
     return call_scipy_method
      
@@ -85,8 +92,16 @@ class ScipyDistribution:
         self._distr = distr
         self.__doc__ = distr.__doc__.split('\n')[0]        
 
-        # bind methods like pdf, cdf, ...
-        for method_name in _common_scipy_rv_methods | _scipy_rv_methods[distribution_kind(distr)]:
+        self._kind = distribution_kind(distr)
+        if self._kind == 'continuous':
+            self._frozen_class = FrozenScipyContinuous
+        elif self._kind == 'discrete': 
+            self._frozen_class = FrozenScipyDiscrete
+        else:
+            raise ValueError(f'unknown distribution kind {self._kind}')
+
+        # bind methods like pdf, cdf, ...        
+        for method_name in _common_scipy_rv_methods | _scipy_rv_methods[self._kind]:
             orig_method = getattr(distr, method_name)
             new_method = MethodType(_wrap_stats_method(distr,orig_method), self)
             setattr(self, method_name, new_method)
@@ -147,13 +162,13 @@ class ScipyDistribution:
         
         Returns
         -------
-        rvs: FrozenScipyStatsWrapper
+        rvs: FrozenScipyContinuous or FrozenScipyDiscrete
             Frozen version of the distribution with shape parameters fixed
         """
+        
+        return self._frozen_class(self, *args, samples=samples, virtual=virtual, sample_chunksize=sample_chunksize, **kwargs)
 
-        return FrozenScipyDistribution(self, *args, samples=samples, virtual=virtual, sample_chunksize=sample_chunksize, **kwargs)
-
-class FrozenScipyDistribution:
+class FrozenScipyBase:
     """Xarray wrapper for frozen scipy.stats distribution.         
     
     It contains the same methods as scipy.stats distribution, such as ``rvs`` to draw
@@ -171,8 +186,48 @@ class FrozenScipyDistribution:
         self.sample_chunksize=sample_chunksize
         self.virtual = virtual
 
-        for method in _common_scipy_rv_methods | _scipy_rv_methods[distribution_kind(distr._distr)]:
-            setattr(self, method, _bind_frozen_method(self, distr, method))
+    def cdf(self, x):
+        return self.distr.cdf(x, *self.args, **self.kwargs)
+
+    def logcdf(self, x):
+        return self.distr.logcdf(x, *self.args, **self.kwargs)
+
+    def sf(self, x):
+        return self.distr.sf(x, *self.args, **self.kwargs)
+
+    def logsf(self, x):
+        return self.distr.logsf(x, *self.args, **self.kwargs)
+
+    def ppf(self, q):
+        return self.distr.ppf(q, *self.args, **self.kwargs)
+
+    def moment(self, n):
+        return self.distr.moment(n, *self.args, **self.kwargs)
+
+    def stats(self, moments='mv'):
+        return self.distr.stats(*self.args, moments=moments, **self.kwargs)
+
+    def entropy(self):
+        return self.distr.entropy(*self.args, **self.kwargs)
+
+    def expect(self, func=None, lb=None, ub=None, conditional=False):
+        return self.distr.expect(*self.args, func=func, lb=lb, ub=ub, conditional=conditional,
+                                 **self.kwargs)
+                                
+    def median(self):
+        return self.distr.median(*self.args, **self.kwargs)
+
+    def mean(self):
+        return self.distr.mean(*self.args, **self.kwargs)
+
+    def std(self):
+        return self.distr.std(*self.args, **self.kwargs)
+
+    def var(self):
+        return self.distr.var(*self.args, **self.kwargs)
+
+    def interval(self, alpha):
+        return self.distr.interval(alpha, *self.args, **self.kwargs)
 
     def rvs(self, samples=None, virtual=None, sample_chunksize=None):
         """Sample frozen distribution.
@@ -202,6 +257,22 @@ class FrozenScipyDistribution:
         sample_chunksize = sample_chunksize or self.sample_chunksize
 
         return self.distr.rvs(*self.args, samples=samples, virtual=virtual, sample_chunksizes=sample_chunksize, **self.kwargs)
+
+class FrozenScipyContinuous(FrozenScipyBase):
+    def pdf(self, x):
+        return self.distr.pdf(x, *self.args, **self.kwargs)
+    
+    def logpdf(self, x):
+        return self.distr.logpdf(x, *self.args, **self.kwargs)
+
+
+class FrozenScipyDiscrete(FrozenScipyBase):
+    def pmf(self, k):
+        return self.distr.pmf(x, *self.args, **self.kwargs)
+
+    def pmf(self, k):
+        return self.distr.logpmf(x, *self.args, **self.kwargs)
+
 
 # augment this module by all distributions in the scipy.stats
 for name, distr in stats.__dict__.items():
