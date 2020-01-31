@@ -18,7 +18,7 @@ _common_scipy_rv_methods = {'cdf', 'logcdf', 'sf', 'logsf', 'ppf',
                             'moment', 'stats', 'entropy', 'expect', 'median',
                             'mean', 'std', 'var', 'interval'}
 
-def _update_signature(sig, stats_distribution):
+def _update_signature(sig, stats_distribution, all_pos_or_kw=True):
     shape_params = list(distribution_parameters(stats_distribution))
     params = [Parameter('self', Parameter.POSITIONAL_ONLY)]
     for param in sig.parameters.values():
@@ -31,6 +31,8 @@ def _update_signature(sig, stats_distribution):
                 else:
                     params.append(Parameter(shape_par, Parameter.POSITIONAL_OR_KEYWORD))
         else:
+            if all_pos_or_kw and param.kind == Parameter.KEYWORD_ONLY:
+                param = param.replace(kind = Parameter.POSITIONAL_OR_KEYWORD)                
             params.append(param)
             try:
                 shape_params.remove(param.name)
@@ -39,14 +41,15 @@ def _update_signature(sig, stats_distribution):
                     
     return sig.replace(parameters=params)
 
-def _wrap_stats_method(stats_distribution, method):
+def _wrap_stats_method(stats_distribution, method, all_pos_or_kw = True):
     """Return method from scipy distribution with updated signature describing
     shape parameters of the distribution"""
         
     def call_scipy_method(self, *args, **kwargs):
         return method(*args, **kwargs)                
     
-    call_scipy_method.__signature__ = _update_signature(signature(method), stats_distribution)
+    call_scipy_method.__signature__ = _update_signature(signature(method), stats_distribution, 
+                                                        all_pos_or_kw=all_pos_or_kw)
 
     return call_scipy_method
      
@@ -89,7 +92,7 @@ class ScipyDistribution:
             setattr(self, method_name, new_method)
     
         # update signature of rvs method
-        self.rvs = MethodType(_wrap_stats_method(distr, self._rvs), self)
+        self.rvs = MethodType(_wrap_stats_method(distr, self._rvs, all_pos_or_kw=True), self)
 
 
     def _rvs(self, *args, samples=1, virtual=None, sample_chunksize=None, **kwargs):
@@ -117,13 +120,13 @@ class ScipyDistribution:
             different on each call. Use `xrrandom.change_virtual_samples` or
             `xrrandom.distributions.sample` to change number of virtual samples.
         """
-        virtual = virtual or self._default_virtual
+        virtual = virtual or self._default_virtual        
 
         if virtual:
-            return virtually_sample_distribution(self._distr, samples=samples, *args, 
+            return virtually_sample_distribution(self._distr, samples, *args, 
                                              sample_chunksize=sample_chunksize, **kwargs)
         else:
-            return sample_distribution(self._distr, samples=samples, *args, **kwargs)
+            return sample_distribution(self._distr, samples, *args, **kwargs)
         
 
     def __call__(self, *args, samples=None, virtual=None, sample_chunksize=None, **kwargs):
