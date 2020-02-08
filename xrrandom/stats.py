@@ -18,8 +18,11 @@ _common_scipy_rv_methods = {'cdf', 'logcdf', 'sf', 'logsf', 'ppf',
                             'moment', 'stats', 'entropy', 'expect', 'median',
                             'mean', 'std', 'var', 'interval'}
 
-def _update_signature(sig, shape_params, all_pos_or_kw=True, remove_kwargs=False):
-    params = [Parameter('self', Parameter.POSITIONAL_ONLY)]
+def _update_signature(sig, shape_params, all_pos_or_kw=True, remove_kwargs=False, add_self=True):    
+    params = []
+    if 'self' not in sig.parameters and add_self:
+        params += [Parameter('self', Parameter.POSITIONAL_OR_KEYWORD)] 
+
     for param in sig.parameters.values():
         if param.kind == Parameter.VAR_POSITIONAL:
             for shape_par in shape_params:
@@ -43,29 +46,31 @@ def _update_signature(sig, shape_params, all_pos_or_kw=True, remove_kwargs=False
     return sig.replace(parameters=params)
 
 def _wrap_stats_method(stats_distribution, method, all_pos_or_kw = True, remove_kwargs = False,
-                       shape_parameters = None):
+                       shape_parameters = None, broadcast = False):
     """Return method from scipy distribution with updated signature describing
     shape parameters of the distribution"""
-        
-    def call_scipy_method(self, *args, **kwargs):
-        return method(*args, **kwargs)                
+            
+    sig = signature(method)
+
+    if 'self' in sig.parameters:
+        def wrapped_method(*args, **kwargs):            
+            return method(*args, **kwargs) 
+    else:
+        def wrapped_method(self, *args, **kwargs):            
+            return method(*args, **kwargs)                
     
     if shape_parameters is None:
         shape_parameters = list(distribution_parameters(stats_distribution))
 
-    call_scipy_method.__signature__ = _update_signature(signature(method), 
-                                                        shape_parameters,
-                                                        all_pos_or_kw=all_pos_or_kw,
-                                                        remove_kwargs=remove_kwargs)
+    wrapped_method.__signature__ = _update_signature(sig, shape_parameters,
+                                                          all_pos_or_kw=all_pos_or_kw,
+                                                          remove_kwargs=remove_kwargs)
+    wrapped_method.__doc__ = method.__doc__
 
-    return call_scipy_method
-     
-
-def _bind_frozen_method(dest, source, method, *args, **kwargs):
-    return partial(getattr(source, method).__get__(dest), *args, **kwargs)
+    return wrapped_method
 
 
-class ScipyDistribution:
+class ScipyDistributionBase:
     """Xarray wrapper for scipy.stats distribution. 
     
     The location (``loc``) keyword specifies the mean.
@@ -100,16 +105,6 @@ class ScipyDistribution:
         else:
             raise ValueError(f'unknown distribution kind {self._kind}')
 
-        # bind methods like pdf, cdf, ...        
-        for method_name in _common_scipy_rv_methods | _scipy_rv_methods[self._kind]:
-            orig_method = getattr(distr, method_name)
-            new_method = MethodType(_wrap_stats_method(distr,orig_method), self)
-            setattr(self, method_name, new_method)
-    
-        # update signature of rvs method
-        self.rvs = MethodType(_wrap_stats_method(distr, self._rvs, all_pos_or_kw=True), self)
-
-
     def _rvs(self, *args, samples=1, virtual=None, sample_chunksize=None, **kwargs):
         """Sample the given distribution.
         
@@ -142,9 +137,8 @@ class ScipyDistribution:
                                              sample_chunksize=sample_chunksize, **kwargs)
         else:
             return sample_distribution(self._distr, samples, *args, **kwargs)
-        
 
-    def __call__(self, *args, samples=None, virtual=None, sample_chunksize=None, **kwargs):
+    def _call(self, *args, samples=None, virtual=None, sample_chunksize=None, **kwargs):
         """Freeze the distribution.
         
         Parameters
@@ -167,6 +161,7 @@ class ScipyDistribution:
         """
         
         return self._frozen_class(self, *args, samples=samples, virtual=virtual, sample_chunksize=sample_chunksize, **kwargs)
+
 
 class FrozenScipyBase:
     """Xarray wrapper for frozen scipy.stats distribution.         
@@ -258,7 +253,7 @@ class FrozenScipyBase:
 
         return self.distr.rvs(*self.args, samples=samples, virtual=virtual, sample_chunksizes=sample_chunksize, **self.kwargs)
 
-class FrozenScipyContinuous(FrozenScipyBase):
+class FrozenScipyContinuous(FrozenScipyBase):    
     def pdf(self, x):
         return self.distr.pdf(x, *self.args, **self.kwargs)
     
@@ -266,7 +261,7 @@ class FrozenScipyContinuous(FrozenScipyBase):
         return self.distr.logpdf(x, *self.args, **self.kwargs)
 
 
-class FrozenScipyDiscrete(FrozenScipyBase):
+class FrozenScipyDiscrete(FrozenScipyBase):    
     def pmf(self, k):
         return self.distr.pmf(x, *self.args, **self.kwargs)
 
@@ -274,7 +269,28 @@ class FrozenScipyDiscrete(FrozenScipyBase):
         return self.distr.logpmf(x, *self.args, **self.kwargs)
 
 
-# augment this module by all distributions in the scipy.stats
-for name, distr in stats.__dict__.items():
-    if isinstance(distr, (stats.rv_continuous, stats.rv_discrete)):
-        globals()[name] = ScipyDistribution(distr)
+def _register_rv(name, distr):
+    """Create new rw class and add it and its parent class to the module's scope"""
+    try:
+        kind = distribution_kind(distr)
+    except ValueError:
+        return
+
+    gen_class = type(f'{name}_gen', (ScipyDistributionBase,), {})
+
+    # bind methods methods and update their signature
+    for method_name in _common_scipy_rv_methods | _scipy_rv_methods.get(kind, set()):
+        orig_method = getattr(distr, method_name)
+        new_method = _wrap_stats_method(distr,orig_method, all_pos_or_kw=True)            
+        setattr(gen_class, method_name, new_method)
+
+    setattr(gen_class, 'rvs', _wrap_stats_method(distr, gen_class._rvs, all_pos_or_kw=True))
+    setattr(gen_class, '__call__', _wrap_stats_method(distr, gen_class._call, all_pos_or_kw=True))    
+
+    globals()[f'_{name}_gen'] = gen_class
+    globals()[name] = gen_class(distr)
+
+
+# augment the module by all distributions in scipy.stats
+for name, distr in stats.__dict__.items():    
+    _register_rv(name, distr)

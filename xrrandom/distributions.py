@@ -1,6 +1,7 @@
 import scipy.stats as stats
 
 from .scipy_stats_sampling import virtually_sample_distribution
+from .scipy_stats_gen import distribution_kind
 
 class VirtualDistribution:
     """Representation of scipy.stats distribution using virtual samples.
@@ -51,5 +52,9 @@ class VirtualDistribution:
 
 # augment this module by all distributions in the scipy.stats
 for name, distr in stats.__dict__.items():
-    if isinstance(distr, (stats.rv_continuous, stats.rv_discrete)):
+    try:
+        distribution_kind(distr)
+    except ValueError:
+        continue
+    else:    
         globals()[name] = VirtualDistribution(distr)                                             
