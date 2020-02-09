@@ -1,11 +1,11 @@
-from types import MethodType
-from functools import partial
 from inspect import signature, Parameter
-import dask.array as da
 import scipy.stats as stats
-import warnings
+import numpy as np
+import xarray as xr
 
-from .scipy_stats_sampling import sample_distribution, virtually_sample_distribution
+from .scipy_stats_sampling import (sample_distribution,
+                                   virtually_sample_distribution,
+                                   _parse_scipy_args, _output_dtypes)
 from .scipy_stats_gen import distribution_kind, distribution_parameters
 
 
@@ -45,19 +45,28 @@ def _update_signature(sig, shape_params, all_pos_or_kw=True, remove_kwargs=False
                     
     return sig.replace(parameters=params)
 
+
 def _wrap_stats_method(stats_distribution, method, all_pos_or_kw = True, remove_kwargs = False,
                        shape_parameters = None, broadcast = False):
     """Return method from scipy distribution with updated signature describing
     shape parameters of the distribution"""
             
     sig = signature(method)
+    parameters = distribution_parameters(stats_distribution)
 
+    # TODO: better way how to distinguish rvs and __call__ from scipy methods
     if 'self' in sig.parameters:
-        def wrapped_method(*args, **kwargs):            
-            return method(*args, **kwargs) 
+
+        def wrapped_method(self, *args, **kwargs):
+            return method(self, *args, **kwargs)
+
     else:
-        def wrapped_method(self, *args, **kwargs):            
-            return method(*args, **kwargs)                
+        output_dtype = _output_dtypes[distribution_kind(stats_distribution)]
+
+        def wrapped_method(self, *args, **kwargs):
+            args = _parse_scipy_args(parameters, *args, **kwargs)
+            args = [xr.DataArray(a) for a in args]
+            return xr.apply_ufunc(method, *args, output_dtypes=[output_dtype])
     
     if shape_parameters is None:
         shape_parameters = list(distribution_parameters(stats_distribution))
@@ -253,6 +262,7 @@ class FrozenScipyBase:
 
         return self.distr.rvs(*self.args, samples=samples, virtual=virtual, sample_chunksizes=sample_chunksize, **self.kwargs)
 
+
 class FrozenScipyContinuous(FrozenScipyBase):    
     def pdf(self, x):
         return self.distr.pdf(x, *self.args, **self.kwargs)
@@ -263,10 +273,10 @@ class FrozenScipyContinuous(FrozenScipyBase):
 
 class FrozenScipyDiscrete(FrozenScipyBase):    
     def pmf(self, k):
-        return self.distr.pmf(x, *self.args, **self.kwargs)
+        return self.distr.pmf(k, *self.args, **self.kwargs)
 
     def pmf(self, k):
-        return self.distr.logpmf(x, *self.args, **self.kwargs)
+        return self.distr.logpmf(k, *self.args, **self.kwargs)
 
 
 def _register_rv(name, distr):
