@@ -46,35 +46,45 @@ def _update_signature(sig, shape_params, all_pos_or_kw=True, remove_kwargs=False
     return sig.replace(parameters=params)
 
 
-def _wrap_stats_method(stats_distribution, method, all_pos_or_kw = True, remove_kwargs = False,
-                       shape_parameters = None, broadcast = False):
-    """Return method from scipy distribution with updated signature describing
+def _update_signature_and_doc(func, ref_func, shape_parameters,
+                              all_pos_or_kw = True, remove_kwargs = False):
+    """Modify (inplace) signature and docstring of func to mimic ref_func"""
+    sig = signature(ref_func)
+    func.__signature__ = _update_signature(sig, shape_parameters,
+                                           all_pos_or_kw=all_pos_or_kw,
+                                           remove_kwargs=remove_kwargs)
+    func.__doc__ = ref_func.__doc__
+
+
+def _wrap_stats_func(stats_distribution, func, is_stats_method,
+                     all_pos_or_kw = True, remove_kwargs = False, ):
+    """Return func from scipy distribution with updated signature describing
     shape parameters of the distribution"""
             
-    sig = signature(method)
-    parameters = distribution_parameters(stats_distribution)
+    sig = signature(func)
+    shape_parameters = list(distribution_parameters(stats_distribution))
+    pos_parameters = [k for k, v in sig.parameters.items() if v.kind in \
+                      [Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD]]
 
     # TODO: better way how to distinguish rvs and __call__ from scipy methods
-    if 'self' in sig.parameters:
-
-        def wrapped_method(self, *args, **kwargs):
-            return method(self, *args, **kwargs)
-
-    else:
+    if is_stats_method:
         output_dtype = _output_dtypes[distribution_kind(stats_distribution)]
 
         def wrapped_method(self, *args, **kwargs):
-            args = _parse_scipy_args(parameters, *args, **kwargs)
+            args = _parse_scipy_args(pos_parameters + shape_parameters, *args, **kwargs)
             args = [xr.DataArray(a) for a in args]
-            return xr.apply_ufunc(method, *args, output_dtypes=[output_dtype])
-    
-    if shape_parameters is None:
-        shape_parameters = list(distribution_parameters(stats_distribution))
+            print(args)
+            return xr.apply_ufunc(func, *args, output_dtypes=[output_dtype])
 
-    wrapped_method.__signature__ = _update_signature(sig, shape_parameters,
-                                                          all_pos_or_kw=all_pos_or_kw,
-                                                          remove_kwargs=remove_kwargs)
-    wrapped_method.__doc__ = method.__doc__
+    else:
+
+        def wrapped_method(self, *args, **kwargs):
+            return func(self, *args, **kwargs)
+
+    _update_signature_and_doc(wrapped_method, func,
+                              shape_parameters,
+                              all_pos_or_kw=all_pos_or_kw,
+                              remove_kwargs=remove_kwargs)
 
     return wrapped_method
 
@@ -291,11 +301,16 @@ def _register_rv(name, distr):
     # bind methods methods and update their signature
     for method_name in _common_scipy_rv_methods | _scipy_rv_methods.get(kind, set()):
         orig_method = getattr(distr, method_name)
-        new_method = _wrap_stats_method(distr,orig_method, all_pos_or_kw=True)            
+        new_method = _wrap_stats_func(distr, orig_method, is_stats_method=True,
+                                      all_pos_or_kw=True)
         setattr(gen_class, method_name, new_method)
 
-    setattr(gen_class, 'rvs', _wrap_stats_method(distr, gen_class._rvs, all_pos_or_kw=True))
-    setattr(gen_class, '__call__', _wrap_stats_method(distr, gen_class._call, all_pos_or_kw=True))    
+    setattr(gen_class, 'rvs', _wrap_stats_func(distr, gen_class._rvs,
+                                               is_stats_method=False,
+                                               all_pos_or_kw=True))
+    setattr(gen_class, '__call__', _wrap_stats_func(distr, gen_class._call,
+                                                    is_stats_method=False,
+                                                    all_pos_or_kw=True))
 
     globals()[f'_{name}_gen'] = gen_class
     globals()[name] = gen_class(distr)
