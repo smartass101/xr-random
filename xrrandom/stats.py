@@ -285,7 +285,7 @@ class FrozenScipyDiscrete(FrozenScipyBase):
     def pmf(self, k):
         return self.distr.pmf(k, *self.args, **self.kwargs)
 
-    def pmf(self, k):
+    def logpmf(self, k):
         return self.distr.logpmf(k, *self.args, **self.kwargs)
 
 
