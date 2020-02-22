@@ -11,24 +11,29 @@ _output_dtypes = {
 }
 
 
-def _rvs_gen_args(stats_distribution, *args, **kwargs):
-    stats_distribution = get_stats_distribution(stats_distribution)
-    output_dtype = _output_dtypes[distribution_kind(stats_distribution)]
-    rvs_gen = sample_dim_rvs_factory(stats_distribution)
-    param_names = distribution_parameters(stats_distribution)
-    # ugly args, kwargs parsing do to inconvenient scipy.stats convention
+def _parse_scipy_args(param_names, *args, **kwargs):
+    # ugly args, kwargs parsing due to inconvenient scipy.stats convention
     args_full = []
     args = list(args)
     for p in param_names:
         if p in kwargs:
             args_full.append(kwargs[p])
-        elif len(args) == 0:    # already empty, need defaults
+        elif len(args) == 0:  # already empty, need defaults
             if p == 'loc':
                 args_full.append(0)
             elif p == 'scale':
                 args_full.append(1)
         else:
             args_full.append(args.pop(0))
+    return args_full
+
+
+def _rvs_gen_args(stats_distribution, *args, **kwargs):
+    stats_distribution = get_stats_distribution(stats_distribution)
+    output_dtype = _output_dtypes[distribution_kind(stats_distribution)]
+    rvs_gen = sample_dim_rvs_factory(stats_distribution)
+    param_names = distribution_parameters(stats_distribution)
+    args_full = _parse_scipy_args(param_names, *args, **kwargs)
     return rvs_gen, args_full, output_dtype
 
 
