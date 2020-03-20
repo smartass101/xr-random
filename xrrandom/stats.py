@@ -208,8 +208,11 @@ class ScipyDistributionBase:
         rvs: FrozenScipyContinuous or FrozenScipyDiscrete
             Frozen version of the distribution with shape parameters fixed
         """
-        
-        return self._frozen_class(self, *args, samples=samples, virtual=virtual, sample_chunksize=sample_chunksize, **kwargs)
+
+        doc = self.__doc__.split('\n')[0] 
+        return self._frozen_class(self, *args, samples=samples, virtual=virtual, 
+                                  sample_chunksize=sample_chunksize, doc=doc,
+                                  **kwargs)
 
 
 class FrozenScipyBase:
@@ -224,13 +227,16 @@ class FrozenScipyBase:
     For the virtual sampling idea look at 
     :py:func``xrrandom.sampling.generate_virtual_samples``
     """    
-    def __init__(self, distr, *args, samples=None, sample_chunksize=None, virtual=None, **kwargs):
+    def __init__(self, distr, *args, samples=None, sample_chunksize=None, 
+                 virtual=None, doc=None, **kwargs):
         self.args = args
         self.kwargs = kwargs
         self.distr = distr
         self.samples = samples
         self.sample_chunksize=sample_chunksize
         self.virtual = virtual
+        if doc is not None:
+            self.__doc__ = doc
 
     def cdf(self, x):
         return self.distr.cdf(x, *self.args, **self.kwargs)
