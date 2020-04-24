@@ -10,7 +10,7 @@ distcont = dict(distcont)
 distdiscrete = dict(distdiscrete)
 
 scipy_distributions = []
-for name, distr in scipy.stats.__dict__.items():
+for name, distr in vars(scipy.stats).items():
     if name in _excluded_distr:
         continue
     try:

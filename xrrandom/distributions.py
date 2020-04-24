@@ -69,5 +69,5 @@ def _register_virtual_rv(name, distr):
     globals()[name] = gen_class(distr)
 
 # augment this module by all distributions in the scipy.stats
-for name, distr in stats.__dict__.items():
+for name, distr in vars(stats).items():
     _register_virtual_rv(name, distr)
