@@ -26,7 +26,7 @@ def distribution_kind(stats_distribution):
     elif isinstance(stats_distribution, stats.rv_discrete):
         return 'discrete'
     else:
-        raise ValueError('stats_distribution bust be either rv_continuous or rv_discrete')
+        raise ValueError('stats_distribution must be either rv_continuous or rv_discrete')
 
 
 _general_params = {
