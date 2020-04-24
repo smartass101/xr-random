@@ -360,7 +360,7 @@ def _register_rv(name, distr):
 
 
 # augment this module by all distributions in scipy.stats
-for name, distr in stats.__dict__.items():
+for name, distr in vars(stats).items():
     if name in _excluded_distr:
         continue
     _register_rv(name, distr)
