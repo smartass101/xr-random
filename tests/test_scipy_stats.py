@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 import xarray as xr
 
@@ -44,3 +45,13 @@ def test_rvs_pdf(stats_distr, loc=0.5, scale=0.1):
     xr_rvs = xr_distr(*xr_shape_params).rvs(samples=N)
     assert np.allclose(scipy_rvs, xr_rvs, equal_nan=True)
     assert isinstance(xr_rvs, xr.DataArray)
+
+
+def test_required_shape_params():
+
+    # shape parameters other than loc and scale are required
+    with pytest.raises(TypeError):
+        xrrandom.stats.gamma()
+
+    # loc and scale have defaults -> this is ok
+    xrrandom.stats.gamma(a=3)

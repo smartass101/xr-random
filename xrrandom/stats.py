@@ -237,64 +237,68 @@ class FrozenScipyBase:
     """    
     def __init__(self, distr, *args, samples=None, sample_chunksize=None, 
                  virtual=None, doc=None, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
-        self.distr = distr
+
+        self._args = args
+        self._kwargs = kwargs
+        self._distr = distr
+        shape_params = self._distr.shape_parameters
+        # _parse_scipy_args raises TypeError if some shape parameters are missing
+        values = _parse_scipy_args(shape_params, *self._args, **self._kwargs)
+        self._shape_parameters = dict((k, v) for k, v in zip(shape_params, values))
+
         self.samples = samples
         self.sample_chunksize=sample_chunksize
         self.virtual = virtual
+
         if doc is not None:
             self.__doc__ = doc
 
     @property
     def shape_parameters(self):
-        """Shape parameters of the frozen distribution"""
-        shape_params = self.distr.shape_parameters
-        values = _parse_scipy_args(shape_params, *self.args, **self.kwargs)
-        return dict((k, v) for k, v in zip(shape_params, values))
+        return self._shape_parameters
 
     def cdf(self, x):
-        return self.distr.cdf(x, *self.args, **self.kwargs)
+        return self._distr.cdf(x, *self._args, **self._kwargs)
 
     def logcdf(self, x):
-        return self.distr.logcdf(x, *self.args, **self.kwargs)
+        return self._distr.logcdf(x, *self._args, **self._kwargs)
 
     def sf(self, x):
-        return self.distr.sf(x, *self.args, **self.kwargs)
+        return self._distr.sf(x, *self._args, **self._kwargs)
 
     def logsf(self, x):
-        return self.distr.logsf(x, *self.args, **self.kwargs)
+        return self._distr.logsf(x, *self._args, **self._kwargs)
 
     def ppf(self, q):
-        return self.distr.ppf(q, *self.args, **self.kwargs)
+        return self._distr.ppf(q, *self._args, **self._kwargs)
 
     def moment(self, n):
-        return self.distr.moment(n, *self.args, **self.kwargs)
+        return self._distr.moment(n, *self._args, **self._kwargs)
 
     def stats(self, moments='mv'):
-        return self.distr.stats(*self.args, moments=moments, **self.kwargs)
+        return self._distr.stats(*self._args, moments=moments, **self._kwargs)
 
     def entropy(self):
-        return self.distr.entropy(*self.args, **self.kwargs)
+        return self._distr.entropy(*self._args, **self._kwargs)
 
     def expect(self, func=None, lb=None, ub=None, conditional=False):
-        return self.distr.expect(*self.args, func=func, lb=lb, ub=ub, conditional=conditional,
-                                 **self.kwargs)
+        return self._distr.expect(*self._args, func=func, lb=lb, ub=ub, conditional=conditional,
+                                  **self._kwargs)
                                 
     def median(self):
-        return self.distr.median(*self.args, **self.kwargs)
+        return self._distr.median(*self._args, **self._kwargs)
 
     def mean(self):
-        return self.distr.mean(*self.args, **self.kwargs)
+        return self._distr.mean(*self._args, **self._kwargs)
 
     def std(self):
-        return self.distr.std(*self.args, **self.kwargs)
+        return self._distr.std(*self._args, **self._kwargs)
 
     def var(self):
-        return self.distr.var(*self.args, **self.kwargs)
+        return self._distr.var(*self._args, **self._kwargs)
 
     def interval(self, alpha):
-        return self.distr.interval(alpha, *self.args, **self.kwargs)
+        return self._distr.interval(alpha, *self._args, **self._kwargs)
 
     def rvs(self, samples=None, virtual=None, sample_chunksize=None):
         """Sample frozen distribution.
@@ -322,17 +326,17 @@ class FrozenScipyBase:
             to change number of virtual samples.
         """
         samples = samples or self.samples or 1
-        virtual = virtual or self.virtual or self.distr._default_virtual
+        virtual = virtual or self.virtual or self._distr._default_virtual
         sample_chunksize = sample_chunksize or self.sample_chunksize
 
-        return self.distr.rvs(*self.args, samples=samples, virtual=virtual, sample_chunksizes=sample_chunksize, **self.kwargs)
+        return self._distr.rvs(*self._args, samples=samples, virtual=virtual, sample_chunksizes=sample_chunksize, **self._kwargs)
 
     def __repr__(self):
         func_args = ', '.join(f'{k}={v}' for k, v in (list(self.shape_parameters.items())+
                                                            [('samples', self.samples),
                                                             ('sample_chunksize', self.sample_chunksize),
                                                             ('virtual', self.virtual)]))
-        distr_name = self.distr.__class__.__name__
+        distr_name = self._distr.__class__.__name__
         if distr_name.endswith('_gen'):
             distr_name = distr_name[:-4]
         return f'{distr_name}({func_args})'
@@ -340,18 +344,18 @@ class FrozenScipyBase:
 
 class FrozenScipyContinuous(FrozenScipyBase):    
     def pdf(self, x):
-        return self.distr.pdf(x, *self.args, **self.kwargs)
+        return self._distr.pdf(x, *self._args, **self._kwargs)
     
     def logpdf(self, x):
-        return self.distr.logpdf(x, *self.args, **self.kwargs)
+        return self._distr.logpdf(x, *self._args, **self._kwargs)
 
 
 class FrozenScipyDiscrete(FrozenScipyBase):    
     def pmf(self, k):
-        return self.distr.pmf(k, *self.args, **self.kwargs)
+        return self._distr.pmf(k, *self._args, **self._kwargs)
 
     def logpmf(self, k):
-        return self.distr.logpmf(k, *self.args, **self.kwargs)
+        return self._distr.logpmf(k, *self._args, **self._kwargs)
 
 
 def _register_rv(name, distr):
