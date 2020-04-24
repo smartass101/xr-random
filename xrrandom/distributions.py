@@ -48,8 +48,8 @@ class VirtualDistribution:
             `xrrandom.change_virtual_samples` or`xrrandom.sample` to 
             change the number of virtual samples.
         """        
-        
-        return virtually_sample_distribution(self._distr, samples=samples, *args,
+
+        return virtually_sample_distribution(self._distr, samples, *args,
                                              sample_chunksize=sample_chunksize,
                                              **kwargs)
 
