@@ -46,6 +46,20 @@ def _update_signature(sig, shape_params, all_pos_or_kw=True, remove_kwargs=False
     return sig.replace(parameters=params)
 
 
+def _shape_params_to_doc(shape_parameters, doc):
+    shape_doc = ''
+    for sp in shape_parameters:
+        sp_doc = f'{sp}: array_like'
+        if sp == 'scale':
+            sp_doc += ', optional (default=1)'
+        elif sp == 'loc':
+            sp_doc += ', optional (default=0)'
+        shape_doc += sp_doc+'\n        '
+    shape_doc = shape_doc[:-9]
+
+    return doc.format(shape_parameters = shape_doc)
+
+
 def _update_signature_and_doc(func, ref_func, shape_parameters,
                               all_pos_or_kw = True, remove_kwargs = False):
     """Modify (inplace) signature and docstring of func to mimic ref_func"""
@@ -53,7 +67,9 @@ def _update_signature_and_doc(func, ref_func, shape_parameters,
     func.__signature__ = _update_signature(sig, shape_parameters,
                                            all_pos_or_kw=all_pos_or_kw,
                                            remove_kwargs=remove_kwargs)
-    func.__doc__ = ref_func.__doc__
+                                           
+    if hasattr(ref_func, '__doc__') and ref_func.__doc__ is not None:                
+        func.__doc__ = _shape_params_to_doc(shape_parameters, ref_func.__doc__)           
 
 
 def _wrap_stats_func(stats_distribution, func, is_stats_method,
@@ -97,15 +113,18 @@ class ScipyDistributionBase:
     Other shape parameters specific for the distribution are passed to 
     the scipy distribution.
 
-    The size of the output array is determined by broadcasting the shapes of the
-    input arrays, scipy.stats ``shape`` parameter is ignored.
+    The size of the output array is determined by broadcasting the shapes of 
+    the input arrays, scipy.stats ``shape`` parameter is ignored.
 
-    The ``samples`` parameter determines how many random samples will be drawn.
+    The ``samples`` parameter in ``rvs`` method determines how many random
+    samples will be drawn.
 
-    It contains the same methods as scipy.stats distribution, such as ``rvs`` to draw
-    random samples. Direct call creates frozen distribution. 
+    It contains the same methods as scipy.stats distribution, such as ``rvs``    
+    to draw random samples or ``pdf`` to compute probability density function. 
+    Direct call creates frozen distribution. 
 
-    Use ``rvs`` with parameter ``virtual=True`` to obtain virtually sampled distribution.
+    Use ``rvs`` with parameter ``virtual=True`` to obtain virtually sampled 
+    distribution.
 
     For the virtual sampling idea look at :py:func`xrrandom.sampling.generate_virtual_samples``
     """
@@ -114,12 +133,24 @@ class ScipyDistributionBase:
 
     def __init__(self, distr):
         self._distr = distr
-        self.__doc__ = distr.__doc__.split('\n')[0]        
+
+        # copy docstring
+        doc_rows = distr.__doc__.split('\n')
+        self.__doc__ = doc_rows[0]+'\n\nXarray wrapper for scipy.stats class.\n\n'
+        try:
+            first_row = doc_rows.index('    Methods')
+        except ValueError:
+            first_row = 2
+        try:
+            last_row =   doc_rows.index('    Examples')
+        except ValueError:
+            last_row = None
+        self.__doc__ += '\n'.join(row[4:] for row in doc_rows[first_row:last_row])
 
         self._kind = distribution_kind(distr)
         if self._kind == 'continuous':
             self._frozen_class = FrozenScipyContinuous
-        elif self._kind == 'discrete': 
+        elif self._kind == 'discrete':
             self._frozen_class = FrozenScipyDiscrete
         else:
             raise ValueError(f'unknown distribution kind {self._kind}')
@@ -129,25 +160,26 @@ class ScipyDistributionBase:
         
         Parameters
         ----------
-        args, kwargs: xarray.DataArray
-            The shape parameter(s) for the distribution. Should include all the non-optional arguments,
-            may include ``loc`` and ``scale``.
+        {shape_parameters}
         samples: int, optional
             Number of random samples (default: 1)
         virtual: bool, optional
             Return virtually sampled distribution (default: False)
         sample_chinksize: ints, optional
-            Chunksize of the sample dimension (default: None). If given, the number of samples cannot be later changed. 
-            Used only if `virtual` is True.
+            Chunksize of the sample dimension (default: None). If given, 
+            the number of samples cannot be later changed. Used only if 
+            `virtual` is True.
         
         Returns
         -------
         rvs: xarray.DataArray
             Random samples from the given distribution. Standard static array 
-            if virtual is False,otherwise DataArray wrapping delayed Dask array.
-            In such case samples obtained by `virtual_samples.values` will be 
-            different on each call. Use `xrrandom.change_virtual_samples` or
-            `xrrandom.distributions.sample` to change number of virtual samples.
+            if virtual is False,otherwise DataArray wrapping delayed Dask 
+            array. In such case samples obtained by `virtual_samples.values` 
+            will be different on each call. Use 
+            `xrrandom.change_virtual_samples` or 
+            `xrrandom.distributions.sample`
+            to change number of virtual samples.
         """
         virtual = virtual or self._default_virtual        
 
@@ -162,16 +194,14 @@ class ScipyDistributionBase:
         
         Parameters
         ----------
-        args, kwargs: xarray.DataArray
-            The shape parameter(s) for the distribution. Should include all the non-optional arguments,
-            may include ``loc`` and ``scale``.
+        {shape_parameters}
         samples: int, optional
-            Number of random samples. 
+            Number of random samples (default: 1). 
         virtual: bool, optional
-            Return virtually sampled distribution?
+            Return virtually sampled distribution? (default: False)
         sample_chinksize: ints, optional
-            Chunksize of the sample dimension. If given, the number of samples cannot be later changed. 
-            Used only if `virtual` is True.
+            Chunksize of the sample dimension. If given, the number of samples
+            cannot be later changed. Used only if `virtual` is True.
         
         Returns
         -------
@@ -185,12 +215,14 @@ class ScipyDistributionBase:
 class FrozenScipyBase:
     """Xarray wrapper for frozen scipy.stats distribution.         
     
-    It contains the same methods as scipy.stats distribution, such as ``rvs`` to draw
-    random samples.
+    It contains the same methods as scipy.stats distribution, such as ``rvs``
+    to draw random samples.
 
-    Use ``rvs`` with parameter ``virtual=True`` to obtain virtually sampled distribution.
+    Use ``rvs`` with parameter ``virtual=True`` to obtain virtually sampled
+    distribution.
 
-    For the virtual sampling idea look at :py:func`xrrandom.sampling.generate_virtual_samples``
+    For the virtual sampling idea look at 
+    :py:func``xrrandom.sampling.generate_virtual_samples``
     """    
     def __init__(self, distr, *args, samples=None, sample_chunksize=None, virtual=None, **kwargs):
         self.args = args
@@ -263,8 +295,10 @@ class FrozenScipyBase:
             Random samples from the given distribution. Standard static array 
             if virtual is False, otherwise DataArray wrapping delayed Dask 
             array. In such case samples obtained by `virtual_samples.values` 
-            will be different on each call. Use `xrrandom.change_virtual_samples`
-            or`xrrandom.distributions.sample` to change number of virtual samples.
+            will be different on each call. Use 
+            `xrrandom.change_virtual_samples` or 
+            `xrrandom.distributions.sample` 
+            to change number of virtual samples.
         """
         samples = samples or self.samples or 1
         virtual = virtual or self.virtual or self.distr._default_virtual
@@ -290,7 +324,7 @@ class FrozenScipyDiscrete(FrozenScipyBase):
 
 
 def _register_rv(name, distr):
-    """Create new rw class and add it and its parent class to the module's scope"""
+    """Create new rv class and add it and its parent class to the module's scope"""
     try:
         kind = distribution_kind(distr)
     except ValueError:
@@ -310,12 +344,12 @@ def _register_rv(name, distr):
                                                all_pos_or_kw=True))
     setattr(gen_class, '__call__', _wrap_stats_func(distr, gen_class._call,
                                                     is_stats_method=False,
-                                                    all_pos_or_kw=True))
+                                                    all_pos_or_kw=True))                                                            
 
     globals()[f'_{name}_gen'] = gen_class
     globals()[name] = gen_class(distr)
 
 
-# augment the module by all distributions in scipy.stats
+# augment this module by all distributions in scipy.stats
 for name, distr in stats.__dict__.items():    
     _register_rv(name, distr)
