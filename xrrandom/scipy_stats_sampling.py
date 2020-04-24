@@ -15,6 +15,7 @@ def _parse_scipy_args(param_names, *args, **kwargs):
     # ugly args, kwargs parsing due to inconvenient scipy.stats convention
     args_full = []
     args = list(args)
+    missing = []
     for p in param_names:
         if p in kwargs:
             args_full.append(kwargs[p])
@@ -23,8 +24,14 @@ def _parse_scipy_args(param_names, *args, **kwargs):
                 args_full.append(0)
             elif p == 'scale':
                 args_full.append(1)
+            else:
+                missing.append(f"'{p}'")
         else:
             args_full.append(args.pop(0))
+
+    if len(missing) > 0:
+        raise TypeError(f'missing shape parameter(s): {", ".join(missing)}')
+
     return args_full
 
 
