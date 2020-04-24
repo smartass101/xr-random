@@ -158,6 +158,11 @@ class ScipyDistributionBase:
         else:
             raise ValueError(f'unknown distribution kind {self._kind}')
 
+    @property
+    def shape_parameters(self):
+        """Shape parameters of the distribution"""
+        return distribution_parameters(self._distr)
+
     def _rvs(self, *args, samples=1, virtual=None, sample_chunksize=None, **kwargs):
         """Sample the given distribution.
         
@@ -241,6 +246,13 @@ class FrozenScipyBase:
         if doc is not None:
             self.__doc__ = doc
 
+    @property
+    def shape_parameters(self):
+        """Shape parameters of the frozen distribution"""
+        shape_params = self.distr.shape_parameters
+        values = _parse_scipy_args(shape_params, *self.args, **self.kwargs)
+        return dict((k, v) for k, v in zip(shape_params, values))
+
     def cdf(self, x):
         return self.distr.cdf(x, *self.args, **self.kwargs)
 
@@ -314,6 +326,16 @@ class FrozenScipyBase:
         sample_chunksize = sample_chunksize or self.sample_chunksize
 
         return self.distr.rvs(*self.args, samples=samples, virtual=virtual, sample_chunksizes=sample_chunksize, **self.kwargs)
+
+    def __repr__(self):
+        func_args = ', '.join(f'{k}={v}' for k, v in (list(self.shape_parameters.items())+
+                                                           [('samples', self.samples),
+                                                            ('sample_chunksize', self.sample_chunksize),
+                                                            ('virtual', self.virtual)]))
+        distr_name = self.distr.__class__.__name__
+        if distr_name.endswith('_gen'):
+            distr_name = distr_name[:-4]
+        return f'{distr_name}({func_args})'
 
 
 class FrozenScipyContinuous(FrozenScipyBase):    
