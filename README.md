@@ -3,18 +3,26 @@
 One of the main uses for this library is to generate Monte Carlo samples from distributions parametrized by xarray objects for the purpose of error propagation in complicated data processing pipelines.
 
 ## Example usage
-
-
-The distributions from `scipy.stats` are used by default
-
-    import numpy as np
-    import xarray as xr
-    import xrrandom
-    loc = xr.DataArray(np.arange(5), dims=['loc'], name='loc')
-    scale = xr.DataArray(np.arange(3)/2, dims=['scale'], name='scale')
-    # 10 samples with the loc and scale (specified as keyword) automatically broadcasted
-    samples = xrrandom.sample_distribution('norm', 10, loc, scale=scale)
     
+### Scipy.stats for xarray
+
+```python
+from xrrandom import stats
+
+loc = xr.DataArray(np.arange(5), dims=['loc'], name='loc')
+scale = xr.DataArray(np.arange(3)/2, dims=['scale'], name='scale')
+
+# 2 ways to generate 10 samples with the loc and scale automatically broadcasted
+samples = stats.gamma(3, loc, scale).rvs(10) 
+samples = stats.gamma.rvs(3, loc, scale, samples=10)
+
+# shape parameters can be used as keywords
+samples = stats.gamma(loc, scale, a=3).rvs(10)
+
+# xrrandom.stats provides the same methods as scipy.stats
+pdf = stats.norm(loc, scale).pdf([-1, 1])
+pdf = stats.norm.pdf([-1, 1], loc, scale=scale)
+```
     
 ### Virtual samples
 
@@ -23,6 +31,44 @@ In some cases (e.g. interactive usage) it is convenient to
 2. perform various operations on the samples, dask builds the graph
 3. compute as many samples as needed (e.g. tested by histograms) from the result
 
+The virtual samples can be thought of as a representation of the whole distribution from which we can sample when needed.
+
+```python
+from xrrandom import distributions, sample
+
+# generate a normal and gamma distribution
+a = distributions.norm(xr.DataArray(2), 4)
+b = distributions.gamma(a=xr.DataArray(3), loc=5, scale=5)
+
+# do some complicated computation
+c = np.log(b) + b**a
+
+# sample c
+samples = sample(c, 1000)
+
+# if 1000 samples is not enough, add more samples
+more_samples = sample(c, 10000)
+samples = xr.concat([more_samples, samples], dim='sample')
+
+# do more stuff with c and sample again
+d = c**0.3
+samples_d = sample(d, 300)
+``` 
+
+### Low-level interface
+The distributions from `scipy.stats` are used by default
+
+    import numpy as np
+    import xarray as xr
+    import xrrandom
+    
+    loc = xr.DataArray(np.arange(5), dims=['loc'], name='loc')
+    scale = xr.DataArray(np.arange(3)/2, dims=['scale'], name='scale')
+    
+    # 10 samples with the loc and scale (specified as keyword) automatically broadcasted
+    samples = xrrandom.sample_distribution('norm', 10, loc, scale=scale)
+
+#### low-level virtual samples
 For this use case the `virtually_sample_distribution` function (canonically just 1 virtual sample is used) can be used at the beginning and once as specific number of samples is requested, the `change_virtual_samples` function modifies the number of samples.
 
 

@@ -149,3 +149,28 @@ def change_virtual_samples(virtually_sampled_darray, new_sample_count:int):
     )
     return new_darray
 
+
+def sample(distr, samples=None):
+    """Sample virtual distribution
+
+    Parameters
+    ----------
+    distr : xarray.DataArray
+        xarray representing the virtual distribution
+    samples : int, optional
+        number of samples to be generated, defaults to the number of samples specified
+        when creating the distribution
+
+
+    Returns
+    -------
+    samples : xarray object
+        samples from the given distribution
+    """
+    if not isinstance(distr.data, da.Array):
+        raise TypeError('`distribution` must be dask xarray')
+    if samples is not None:
+        distr = change_virtual_samples(distr, new_sample_count=samples)
+    
+    return distr.compute()
+
