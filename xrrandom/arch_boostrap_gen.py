@@ -3,10 +3,11 @@ import xarray as xr
 
 from arch import bootstrap
 
+_null_arr = np.empty(0)
 
 def create_mock_bootstrap(cls, num_items, *bs_params):
     """Creates a mock instance of cls with num_items set without data"""
-    args = bs_params + ((),)         # add empty data
+    args = bs_params + (_null_arr,)         # add empty data
     bs = cls(*args)
     if num_items:
         bs._num_items = num_items  # TODO ugly workaround
