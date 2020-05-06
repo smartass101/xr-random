@@ -9,6 +9,10 @@ from .scipy_stats_sampling import (sample_distribution,
 from .scipy_stats_gen import distribution_kind, distribution_parameters
 
 
+_excluded_distr = ['frechet_r', # deprecated, inconsistent signature of pdf: (*args, **kwargs) instead of (x, *args, **kwargs)
+                   'frechet_l', # deprecated, inconsistent signature of pdf: (*args, **kwargs) instead of (x, *args, **kwargs)
+                   ]
+
 _scipy_rv_methods = {
     'continuous': {'pdf', 'logpdf', 'fit', 'fit_loc_scale', 'nnlf'},
     'discrete': {'pmf', 'logpmf'},    
@@ -89,7 +93,6 @@ def _wrap_stats_func(stats_distribution, func, is_stats_method,
         def wrapped_method(self, *args, **kwargs):
             args = _parse_scipy_args(pos_parameters + shape_parameters, *args, **kwargs)
             args = [xr.DataArray(a) for a in args]
-            print(args)
             return xr.apply_ufunc(func, *args, output_dtypes=[output_dtype])
 
     else:
@@ -357,5 +360,7 @@ def _register_rv(name, distr):
 
 
 # augment this module by all distributions in scipy.stats
-for name, distr in stats.__dict__.items():    
+for name, distr in stats.__dict__.items():
+    if name in _excluded_distr:
+        continue
     _register_rv(name, distr)
