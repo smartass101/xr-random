@@ -3,6 +3,7 @@ import scipy.stats as stats
 import numpy as np
 import xarray as xr
 
+from .sampling import _ensure_xarray_return_type
 from .scipy_stats_sampling import (sample_distribution,
                                    virtually_sample_distribution,
                                    _parse_scipy_args, _output_dtypes)
@@ -92,8 +93,8 @@ def _wrap_stats_func(stats_distribution, func, is_stats_method,
 
         def wrapped_method(self, *args, **kwargs):
             args = _parse_scipy_args(pos_parameters + shape_parameters, *args, **kwargs)
-            args = [xr.DataArray(a) for a in args]
-            return xr.apply_ufunc(func, *args, output_dtypes=[output_dtype])
+            ret =  xr.apply_ufunc(func, *args, output_dtypes=[output_dtype])
+            return _ensure_xarray_return_type(ret)
 
     else:
 

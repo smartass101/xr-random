@@ -23,11 +23,25 @@ def _virtual_array(shape:tuple or int):
     return np.lib.stride_tricks.as_strided(_empty_1d, shape, strides)
 
 
+def _ensure_xarray_return_type(ret):
+    """Ensures that the return value is a DataArray or Dataset
+
+    if not, wraps it as DataArray(ret)
+
+    if ret is a Variable the dimensions are retained
+    otherwise they cannot be guessed
+    """
+    if not isinstance(ret, (xr.DataArray, xr.Dataset)):
+        return xr.DataArray(ret)  # uses existing dimension info if any
+    else:
+        return ret
+
+
 def _generate_apply_ufunc(gen_func, args, samples_arr, samples, output_dtype):
     result = xr.apply_ufunc(gen_func, xr.Variable('sample', samples_arr), *args,
                             dask='parallelized', output_dtypes=[output_dtype],
     )
-    return result
+    return _ensure_xarray_return_type(result)
 
 
 def generate_samples(gen_func, args, samples:int=1, output_dtype=np.float):

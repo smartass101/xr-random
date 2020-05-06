@@ -10,6 +10,16 @@ def test_virtual_array():
     assert arr.shape == (1000,)
 
 
+def test_returned_xarray():
+    samples = sample_distribution('norm')
+    assert isinstance(samples, xr.DataArray)
+    assert samples.sizes == {'sample': 1}
+    samples = sample_distribution('norm',
+                                  loc=xr.Variable('means', [1, 2]))
+    assert isinstance(samples, xr.DataArray)
+    assert samples.ndim == 2
+
+
 def test_sample_norm():
     loc = xr.DataArray(np.arange(5), dims=['loc'], name='loc')
     scale = xr.DataArray(np.arange(3)/2, dims=['scale'], name='scale')

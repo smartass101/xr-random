@@ -26,13 +26,11 @@ def test_rvs_pdf(stats_distr, loc=0.5, scale=0.1):
     else:
         raise ValueError(f'unknown kind {stats_distr["kind"]}')
 
-    xr_shape_params = [xr.DataArray(sp) for sp in shape_params]
-
     N = 100
     np.random.seed(0)
     scipy_rvs = scipy_distr(*shape_params).rvs(size=N)
     np.random.seed(0)
-    xr_rvs = xr_distr(*xr_shape_params)
+    xr_rvs = xr_distr(*shape_params)
 
     assert np.allclose(scipy_rvs, sample(xr_rvs, N), equal_nan=True)
     assert isinstance(xr_rvs, xr.DataArray)

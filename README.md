@@ -2,8 +2,10 @@
 
 One of the main uses for this library is to generate Monte Carlo samples from distributions parametrized by xarray objects for the purpose of error propagation in complicated data processing pipelines.
 
-## Example usage
+Note that wrapped methods in `xrrandom` always return `DataArray` or `Dataset` instances even if scalars or `numpy.darray` are passed as distribution parameters for the sake of consistence.
     
+## Example usage
+
 ### Scipy.stats for xarray
 
 ```python

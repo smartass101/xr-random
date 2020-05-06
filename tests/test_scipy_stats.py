@@ -25,24 +25,23 @@ def test_rvs_pdf(stats_distr, loc=0.5, scale=0.1):
     else:
         raise ValueError(f'unknown kind {stats_distr["kind"]}')
 
-    xr_shape_params = [xr.DataArray(sp) for sp in shape_params]
 
     frozen_scipy = scipy_distr(*shape_params)
     scipy_pdf = getattr(frozen_scipy, method)(x)
 
-    assert np.allclose(scipy_pdf, getattr(xr_distr, method)(x, *xr_shape_params), equal_nan=True)
-    assert np.allclose(scipy_pdf, getattr(xr_distr(*xr_shape_params), method)(x), equal_nan=True)  # frozen
+    assert np.allclose(scipy_pdf, getattr(xr_distr, method)(x, *shape_params), equal_nan=True)
+    assert np.allclose(scipy_pdf, getattr(xr_distr(*shape_params), method)(x), equal_nan=True)  # frozen
 
     N = 100
     np.random.seed(0)
     scipy_rvs = frozen_scipy.rvs(size=N)
     np.random.seed(0)
-    xr_rvs = xr_distr.rvs(*xr_shape_params, samples=N)
+    xr_rvs = xr_distr.rvs(*shape_params, samples=N)
     assert np.allclose(scipy_rvs, xr_rvs, equal_nan=True)
     assert isinstance(xr_rvs, xr.DataArray)
 
     np.random.seed(0)
-    xr_rvs = xr_distr(*xr_shape_params).rvs(samples=N)
+    xr_rvs = xr_distr(*shape_params).rvs(samples=N)
     assert np.allclose(scipy_rvs, xr_rvs, equal_nan=True)
     assert isinstance(xr_rvs, xr.DataArray)
 
