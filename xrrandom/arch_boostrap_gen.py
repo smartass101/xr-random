@@ -53,6 +53,6 @@ def bootstrap_samples(xrobj, dim:str, n_samples:int=1000, bootstrap_cls='IIDBoot
     indices = xr.DataArray(np.vstack(indices), dims=['sample', dim])
     res = xrobj.isel(**{dim: indices})
     if dim in res.coords:  # should not be as resampling jumbles the coordinate meaning
-        res = res.drop(dim)# workaround for old xarray bug, should not be set to 2D index array
+        del res.coords[dim] # workaround for old xarray bug, should not be set to 2D index array
     return res
 
